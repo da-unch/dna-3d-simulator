@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DNA / タンパク質 3Dシミュレーター</title>
+<title>DNAであそぶ — 3Dシミュレーター</title>
 <style>
-  :root { --bg:#0a0e17; --panel:#141b2b; --line:#26324a; --txt:#e6edf6; --dim:#8ea2c0; --accent:#5cc8ff; }
+  :root { --bg:#0a0e17; --panel:#141b2b; --line:#26324a; --txt:#e6edf6; --dim:#8ea2c0; --accent:#5cc8ff; --warn:#ff5c72; }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--txt);
     font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
@@ -17,93 +17,152 @@
     overflow-y:auto; background:rgba(20,27,43,.92); border:1px solid var(--line);
     border-radius:12px; padding:14px; backdrop-filter:blur(8px); font-size:13px; z-index:10;
   }
-  #panel h1 { font-size:15px; margin:0 0 4px; letter-spacing:.02em; }
-  #panel .sub { color:var(--dim); font-size:11px; margin:0 0 12px; line-height:1.5; }
+  #panel h1 { font-size:16px; margin:0 0 4px; letter-spacing:.02em; }
+  #panel .sub { color:var(--dim); font-size:11px; margin:0 0 12px; line-height:1.55; }
   .group { border-top:1px solid var(--line); padding:11px 0 3px; }
-  .group h2 { font-size:11px; color:var(--dim); margin:0 0 8px; text-transform:uppercase; letter-spacing:.08em; }
+  .group h2 { font-size:12px; color:var(--txt); margin:0 0 8px; letter-spacing:.02em; }
+  .group h2 small { color:var(--dim); font-weight:400; font-size:10px; }
   .row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
   button {
-    flex:1; min-width:60px; background:var(--panel); color:var(--txt); border:1px solid var(--line);
+    flex:1; min-width:56px; background:var(--panel); color:var(--txt); border:1px solid var(--line);
     border-radius:8px; padding:7px 8px; font-size:12px; cursor:pointer; transition:.12s;
   }
   button:hover { border-color:var(--accent); color:var(--accent); }
   button.on { background:var(--accent); color:#04121d; border-color:var(--accent); font-weight:600; }
+  button.big { padding:10px; font-weight:600; }
   label.slider { display:block; color:var(--dim); font-size:11px; margin:9px 0 3px; }
   input[type=range] { width:100%; accent-color:var(--accent); }
-  .seq { font-family: ui-monospace, monospace; font-size:12px; letter-spacing:1px; word-break:break-all;
-    background:#0c1220; border:1px solid var(--line); border-radius:8px; padding:8px; line-height:1.7; }
+  .seq { font-family: ui-monospace, monospace; font-size:13px; letter-spacing:1px; word-break:break-all;
+    background:#0c1220; border:1px solid var(--line); border-radius:8px; padding:8px; line-height:1.8; }
+  .seq u { text-decoration: underline wavy var(--warn); text-underline-offset:3px; }
   .legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:var(--dim); }
   .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+  details summary { cursor:pointer; color:var(--dim); font-size:11px; margin:4px 0; }
   #hint { position:fixed; bottom:12px; left:12px; color:var(--dim); font-size:11px; z-index:10;
-    background:rgba(10,14,23,.7); padding:6px 10px; border-radius:8px; }
+    background:rgba(10,14,23,.7); padding:6px 10px; border-radius:8px; max-width:60%; }
   #mode { position:fixed; top:12px; right:12px; z-index:10; background:rgba(20,27,43,.92);
     border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:12px; color:var(--dim); }
   #mode b { color:var(--accent); }
+
+  /* トースト（変異！など） */
+  #toast { position:fixed; top:70px; left:50%; transform:translateX(-50%) translateY(-10px);
+    background:var(--warn); color:#fff; font-weight:700; padding:8px 18px; border-radius:20px;
+    font-size:14px; z-index:30; opacity:0; transition:.25s; pointer-events:none; }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* キャプション（お題の説明） */
+  #caption { position:fixed; bottom:52px; left:50%; transform:translateX(-50%); max-width:620px;
+    width:calc(100% - 340px); background:rgba(16,22,35,.94); border:1px solid var(--line);
+    border-radius:10px; padding:10px 14px; font-size:13px; line-height:1.6; z-index:12; display:none; }
+  #caption b { color:var(--accent); }
+
+  /* 初回ガイド */
+  #guide { position:fixed; inset:0; z-index:50; background:rgba(6,9,15,.72); display:flex;
+    align-items:center; justify-content:center; }
+  #guideCard { width:min(460px,88%); background:var(--panel); border:1px solid var(--line);
+    border-radius:16px; padding:26px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  #guideCard .step { font-size:12px; color:var(--accent); letter-spacing:.1em; margin:0 0 8px; }
+  #guideCard h2 { margin:0 0 10px; font-size:19px; line-height:1.4; }
+  #guideCard p { color:#c7d3e6; line-height:1.7; margin:0 0 20px; font-size:14px; }
+  #guideCard .nav { display:flex; gap:10px; align-items:center; }
+  #guideCard .dots { flex:1; display:flex; gap:6px; }
+  #guideCard .dots span { width:7px; height:7px; border-radius:50%; background:var(--line); }
+  #guideCard .dots span.on { background:var(--accent); }
+  #guideCard button { flex:none; min-width:auto; padding:9px 18px; }
+  #guideCard button.skip { background:transparent; border:none; color:var(--dim); }
+  #guideCard button.next { background:var(--accent); color:#04121d; font-weight:700; border-color:var(--accent); }
 </style>
 </head>
 <body>
 <div id="app"></div>
 
 <div id="panel">
-  <h1>DNA / タンパク質 3D</h1>
-  <p class="sub">ドラッグで視点回転・ホイールでズーム。粒子を <b>掴んで引っ張る</b> と結合が伸び、離すと自然に安定形へ戻る。</p>
+  <h1>DNAであそぶ</h1>
+  <p class="sub">これは、あなたの体の設計図「DNA」を3Dでさわれる模型です。回して・引っ張って・書きかえてみよう。</p>
 
   <div class="group">
-    <h2>DNA 塩基編集</h2>
-    <div class="row"><button id="pickMode">塩基を選ぶ: OFF</button></div>
+    <h2>まず触ってみる <small>お題を選ぶと配列が入る</small></h2>
+    <div class="row">
+      <button data-preset="normal">ふつうの遺伝子</button>
+      <button data-preset="mutant">1文字だけ変異</button>
+    </div>
+    <div class="row">
+      <button id="replicate" class="big">DNAをコピー（複製）</button>
+    </div>
+    <button id="guideBtn" style="width:100%">使い方ガイドをもう一度</button>
+  </div>
+
+  <div class="group">
+    <h2>DNAの文字を変える <small>A T G C</small></h2>
+    <div class="row"><button id="pickMode">書きかえペン: OFF</button></div>
     <div class="row">
       <button data-base="A">A</button><button data-base="T">T</button>
       <button data-base="G">G</button><button data-base="C">C</button>
     </div>
+    <div class="row"><button id="fixPair">ペアを正しく直す</button></div>
     <div class="legend">
       <span><i style="background:#ff6b6b"></i>A</span>
       <span><i style="background:#ffd166"></i>T</span>
       <span><i style="background:#4dd4ac"></i>G</span>
       <span><i style="background:#5cc8ff"></i>C</span>
-      <span><i style="background:#ffffff"></i>メチル化</span>
     </div>
-    <div class="seq" id="seqBox" style="margin-top:8px"></div>
+    <p class="sub" style="margin:8px 0 6px">ルール: <b>A↔T</b> / <b>G↔C</b> しかペアになれない。合わない相手だと<span style="color:var(--warn)">赤くはじき合う</span>。</p>
+    <div class="seq" id="seqBox" style="margin-top:2px"></div>
   </div>
 
   <div class="group">
-    <h2>エピジェネ修飾</h2>
-    <div class="row">
-      <button id="methToggle">メチル化ペン: OFF</button>
-    </div>
-    <label class="slider">凝集の強さ（クロマチン折りたたみ）</label>
+    <h2>遺伝子スイッチ <small>エピジェネ修飾</small></h2>
+    <div class="row"><button id="methToggle">メチル化ペン: OFF</button></div>
+    <label class="slider">スイッチOFFで折りたたむ強さ</label>
     <input type="range" id="compact" min="0" max="100" value="0" />
-    <p class="sub" style="margin:6px 0 0">C(シトシン)を選んで塗るとメチル基が付き、その領域が引き寄せ合って畳まれる。</p>
+    <p class="sub" style="margin:6px 0 0">C(シトシン)に印を付けると、その部分が引き寄せ合って<b>畳まれ、遺伝子が読めなくなる</b>（＝スイッチOFF）。</p>
   </div>
 
   <div class="group">
-    <h2>タンパク質</h2>
+    <h2>設計図から部品を作る <small>タンパク質</small></h2>
+    <div class="row"><button id="translate" class="big">読み取って部品を作る</button></div>
     <div class="row">
-      <button id="translate">転写・翻訳して折りたたむ</button>
+      <button id="refold">もう一度たたむ</button>
+      <button id="showDNA" class="on">DNAを表示</button>
     </div>
-    <div class="row">
-      <button id="refold">再フォールド</button>
-      <button id="showDNA" class="on">DNA表示</button>
-    </div>
-    <div class="seq" id="protBox" style="min-height:20px">まだ翻訳していません</div>
+    <div class="seq" id="protBox" style="min-height:20px">まだ作っていません</div>
     <div class="legend" style="margin-top:6px">
-      <span><i style="background:#ffb454"></i>疎水性</span>
-      <span><i style="background:#63b3ff"></i>親水性</span>
-      <span><i style="background:#ff77aa"></i>特殊</span>
+      <span><i style="background:#ffb454"></i>油っぽい</span>
+      <span><i style="background:#63b3ff"></i>水になじむ</span>
+      <span><i style="background:#ff77aa"></i>特別</span>
     </div>
   </div>
 
-  <div class="group">
-    <h2>物理</h2>
-    <label class="slider">結合の硬さ</label>
-    <input type="range" id="stiff" min="5" max="60" value="28" />
-    <label class="slider">粘性（揺れの収まりやすさ）</label>
-    <input type="range" id="damp" min="70" max="99" value="90" />
-    <div class="row" style="margin-top:8px"><button id="reset">リセット</button></div>
-  </div>
+  <details>
+    <summary>こまかい設定</summary>
+    <div style="padding:6px 0">
+      <label class="slider">結合の硬さ</label>
+      <input type="range" id="stiff" min="5" max="60" value="28" />
+      <label class="slider">揺れの収まりやすさ</label>
+      <input type="range" id="damp" min="70" max="99" value="90" />
+      <div class="row" style="margin-top:8px"><button id="reset">最初に戻す</button></div>
+    </div>
+  </details>
 </div>
 
 <div id="mode">操作モード: <b id="modeLabel">視点</b></div>
-<div id="hint">粒子をドラッグ=引っ張る / 背景をドラッグ=回転 / ダブルクリックで塩基をランダム変異</div>
+<div id="hint">玉をドラッグ=引っ張る（ジッパーみたいに開く）/ 背景をドラッグ=回転 / ホイールでズーム</div>
+<div id="toast"></div>
+<div id="caption"></div>
+
+<!-- 初回ガイド -->
+<div id="guide">
+  <div id="guideCard">
+    <p class="step" id="gStep">STEP 1 / 4</p>
+    <h2 id="gTitle"></h2>
+    <p id="gBody"></p>
+    <div class="nav">
+      <div class="dots" id="gDots"></div>
+      <button class="skip" id="gSkip">スキップ</button>
+      <button class="next" id="gNext">次へ</button>
+    </div>
+  </div>
+</div>
 
 <script type="importmap">
 {
@@ -117,9 +176,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // ============================================================
-//  DNA / タンパク質 3Dシミュレーター  （単一ファイル・ビルド不要）
-//  物理: バネ+Verlet。塩基対は「磁力的」な引力でつながり、
-//  引っ張ると外れ、離すと安定形へ戻る。
+//  DNAであそぶ 3Dシミュレーター
+//  背骨: 相補ペアだけがくっつく「磁石」＋ジッパー開閉＋間違い可視化
 // ============================================================
 const { Scene, PerspectiveCamera, WebGLRenderer, Color, Vector3,
   AmbientLight, DirectionalLight, SphereGeometry, MeshStandardMaterial,
@@ -129,7 +187,7 @@ const container = document.getElementById('app');
 const scene = new Scene();
 scene.background = new Color(0x0a0e17);
 const camera = new PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 500);
-camera.position.set(0, 4, 34);
+camera.position.set(0, 3, 36);
 const renderer = new WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -138,104 +196,99 @@ container.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
 
-scene.add(new AmbientLight(0xffffff, 0.55));
+scene.add(new AmbientLight(0xffffff, 0.6));
 const dl = new DirectionalLight(0xffffff, 0.9); dl.position.set(10,20,15); scene.add(dl);
 const dl2 = new DirectionalLight(0x88aaff, 0.35); dl2.position.set(-15,-8,-10); scene.add(dl2);
 
-// ---------- 色 ----------
+// ---------- 定数 ----------
 const BASE_COLORS = { A:0xff6b6b, T:0xffd166, G:0x4dd4ac, C:0x5cc8ff };
 const COMPLEMENT  = { A:'T', T:'A', G:'C', C:'G' };
 const BASES = ['A','T','G','C'];
+const RISE=1.6, RAD=4.2, TWIST=0.55;      // らせん形状
+const PAIR_REST = RAD*2*0.62;             // ペアの自然な間隔
+const CAPTURE   = PAIR_REST*2.2;          // これより離れると"外れる"
 
-// ---------- 物理エンジン（ノード＋バネ） ----------
-// node: {pos, prev, mesh, pinned, base?, strand?, idx?, meth?}
-// bond: {a, b, rest, k, type}  type: backbone|pair|protein|hydrophobic
+// らせん座標: i番目・鎖side(0/1)・中心cx
+function helixCoord(i, side, cx, n){
+  const ang = i*TWIST + (side?Math.PI:0);
+  const yStart = -(n-1)*RISE/2;
+  return new Vector3(cx + Math.cos(ang)*RAD, yStart + i*RISE, Math.sin(ang)*RAD);
+}
+
+// ---------- 物理: ノード＋バネ ----------
 let nodes = [], bonds = [];
 let params = { stiff:0.28, damp:0.90, compact:0, showDNA:true };
+let replicating = false; // 複製アニメ中は物理停止
 
-function makeNode(x,y,z, opts={}) {
+function makeNode(p, opts={}) {
   const n = Object.assign({
-    pos: new Vector3(x,y,z), prev: new Vector3(x,y,z),
-    force: new Vector3(), pinned:false, mesh:null, meth:false,
+    pos: p.clone(), prev: p.clone(), pinned:false, mesh:null, meth:false,
   }, opts);
   nodes.push(n); return n;
 }
-function bond(a,b,k,type,rest){
-  bonds.push({ a,b,k, type, rest: rest!=null?rest:a.pos.distanceTo(b.pos) });
-}
-
-// ---------- DNA構築 ----------
-let sequence = "ATGGCACGTTACGGATCCAAAGAGTGA".split(''); // 開始ATG含む例
-let helixNodes = [];     // strand1
-let helixNodesB = [];    // strand2 (complement)
-let pairBonds = [];
-const dnaGroup = new Group(); scene.add(dnaGroup);
 
 const sphereGeo = new SphereGeometry(1, 20, 16);
 function baseMesh(color){
-  const m = new Mesh(sphereGeo, new MeshStandardMaterial({ color, roughness:.4, metalness:.15 }));
-  return m;
+  return new Mesh(sphereGeo, new MeshStandardMaterial({ color, roughness:.4, metalness:.15 }));
 }
 
-// bond可視化: 細い円柱を毎フレーム更新
 const bondGroup = new Group(); scene.add(bondGroup);
+const cylGeo = new CylinderGeometry(1,1,1,6);
 function makeBondMesh(color, r){
-  const g = new CylinderGeometry(r, r, 1, 6);
-  const m = new Mesh(g, new MeshStandardMaterial({ color, roughness:.6,
+  const m = new Mesh(cylGeo, new MeshStandardMaterial({ color, roughness:.6,
     transparent:true, opacity:.85 }));
-  bondGroup.add(m); return m;
+  m.userData.r = r; bondGroup.add(m); return m;
 }
+const _yAxis = new Vector3(0,1,0), _dir = new Vector3(), _mid = new Vector3();
 function orientBond(mesh, a, b){
-  const mid = a.clone().add(b).multiplyScalar(0.5);
-  mesh.position.copy(mid);
-  const dir = b.clone().sub(a); const len = dir.length();
-  mesh.scale.set(1, Math.max(len,0.001), 1);
-  mesh.quaternion.setFromUnitVectors(new Vector3(0,1,0), dir.normalize());
+  _mid.copy(a).add(b).multiplyScalar(0.5); mesh.position.copy(_mid);
+  _dir.copy(b).sub(a); const len=_dir.length();
+  mesh.scale.set(mesh.userData.r, Math.max(len,0.001), mesh.userData.r);
+  mesh.quaternion.setFromUnitVectors(_yAxis, _dir.normalize());
 }
+
+// ---------- DNA構築 ----------
+let sequence = "ATGGCACGTTACGGATCCAAAGAGTGA".split('');
+let helixNodes = [], helixNodesB = [];
+let pairMeshes = [], mismatchMarks = [];
+const dnaGroup = new Group(); scene.add(dnaGroup);
+
+function clearGroup(g){ while(g.children.length) g.remove(g.children[0]); }
 
 function buildDNA(){
-  // クリア
-  nodes = []; bonds = []; helixNodes=[]; helixNodesB=[]; pairBonds=[];
-  while(dnaGroup.children.length) dnaGroup.remove(dnaGroup.children[0]);
-  while(bondGroup.children.length) bondGroup.remove(bondGroup.children[0]);
-
+  nodes = []; bonds = []; helixNodes=[]; helixNodesB=[]; pairMeshes=[]; mismatchMarks=[];
+  clearGroup(dnaGroup); clearGroup(bondGroup); clearGroup(protGroup);
+  proteinNodes=[]; hasProtein=false;
+  replicating=false;
   const N = sequence.length;
-  const rise = 1.6, radius = 4.2, twist = 0.55;
-  const yStart = -(N-1)*rise/2;
   for(let i=0;i<N;i++){
-    const ang = i*twist;
-    const y = yStart + i*rise;
-    const a = makeNode(Math.cos(ang)*radius, y, Math.sin(ang)*radius,
-      { base:sequence[i], strand:0, idx:i });
-    const bAng = ang + Math.PI;
-    const comp = COMPLEMENT[sequence[i]];
-    const b = makeNode(Math.cos(bAng)*radius, y, Math.sin(bAng)*radius,
-      { base:comp, strand:1, idx:i });
-    a.mesh = baseMesh(BASE_COLORS[a.base]); a.mesh.userData.node=a; dnaGroup.add(a.mesh);
-    b.mesh = baseMesh(BASE_COLORS[b.base]); b.mesh.userData.node=b; dnaGroup.add(b.mesh);
-    a.mesh.scale.setScalar(0.85); b.mesh.scale.setScalar(0.85);
-    a.methMesh = methMarker(a); b.methMesh = methMarker(b);
+    const a = makeNode(helixCoord(i,0,0,N), { base:sequence[i], strand:0, idx:i });
+    const b = makeNode(helixCoord(i,1,0,N), { base:COMPLEMENT[sequence[i]], strand:1, idx:i });
+    a.mesh = baseMesh(BASE_COLORS[a.base]); a.mesh.userData.node=a; a.mesh.scale.setScalar(0.85); dnaGroup.add(a.mesh);
+    b.mesh = baseMesh(BASE_COLORS[b.base]); b.mesh.userData.node=b; b.mesh.scale.setScalar(0.85); dnaGroup.add(b.mesh);
+    a.methMesh = methMarker(); b.methMesh = methMarker();
     helixNodes.push(a); helixNodesB.push(b);
-    // 塩基対（磁力的な結合）
-    const pb = { a, b, k:0.06, type:'pair', rest: radius*2*0.62 };
-    bonds.push(pb); pairBonds.push(pb);
-    pb.mesh = makeBondMesh(0x66788f, 0.08);
+    // ペアの結合線
+    const pm = makeBondMesh(0x66788f, 0.08); pairMeshes.push(pm);
+    // 不一致マーカー（赤い小球）
+    const mk = new Mesh(new SphereGeometry(0.4,10,8),
+      new MeshStandardMaterial({ color:0xff3355, emissive:0x551111 }));
+    mk.visible=false; dnaGroup.add(mk); mismatchMarks.push(mk);
   }
-  // 背骨（同一鎖の隣接をつなぐ）
+  // 背骨（同じ鎖の隣どうし）
   for(let i=0;i<N-1;i++){
-    const b1 = { a:helixNodes[i], b:helixNodes[i+1], k:0.4, type:'backbone' };
-    b1.rest = b1.a.pos.distanceTo(b1.b.pos); bonds.push(b1);
-    b1.mesh = makeBondMesh(0xff9a8b, 0.11);
-    const b2 = { a:helixNodesB[i], b:helixNodesB[i+1], k:0.4, type:'backbone' };
-    b2.rest = b2.a.pos.distanceTo(b2.b.pos); bonds.push(b2);
-    b2.mesh = makeBondMesh(0x8bb4ff, 0.11);
+    addBackbone(helixNodes[i], helixNodes[i+1], 0xff9a8b);
+    addBackbone(helixNodesB[i], helixNodesB[i+1], 0x8bb4ff);
   }
   updateSeqBox();
 }
-
-function methMarker(node){
-  const m = new Mesh(new SphereGeometry(0.35,10,8),
-    new MeshStandardMaterial({ color:0xffffff, emissive:0x555555 }));
+function addBackbone(a,b,color){
+  const bd = { a, b, k:0.4, type:'backbone', rest:a.pos.distanceTo(b.pos) };
+  bd.mesh = makeBondMesh(color, 0.11); bonds.push(bd);
+}
+function methMarker(){
+  const m = new Mesh(new SphereGeometry(0.32,10,8),
+    new MeshStandardMaterial({ color:0xffffff, emissive:0x666666 }));
   m.visible=false; dnaGroup.add(m); return m;
 }
 
@@ -250,15 +303,11 @@ const CODON_TABLE = {
   TGT:'C',TGC:'C',TGA:'*',TGG:'W',CGT:'R',CGC:'R',CGA:'R',CGG:'R',
   AGT:'S',AGC:'S',AGA:'R',AGG:'R',GGT:'G',GGC:'G',GGA:'G',GGG:'G'
 };
-// 疎水性(1)/親水性(-1)/特殊(0) と色
 const AA_PROP = {
-  A:['疎',1],V:['疎',1],L:['疎',1],I:['疎',1],M:['疎',1],F:['疎',1],W:['疎',1],P:['特',0],
-  G:['特',0],C:['特',0],
-  S:['親',-1],T:['親',-1],Y:['親',-1],N:['親',-1],Q:['親',-1],
-  D:['親',-1],E:['親',-1],K:['親',-1],R:['親',-1],H:['親',-1]
+  A:1,V:1,L:1,I:1,M:1,F:1,W:1,P:0,G:0,C:0,
+  S:-1,T:-1,Y:-1,N:-1,Q:-1,D:-1,E:-1,K:-1,R:-1,H:-1
 };
-function aaColor(a){ const p=AA_PROP[a]?AA_PROP[a][1]:0;
-  return p>0?0xffb454 : p<0?0x63b3ff : 0xff77aa; }
+function aaColor(a){ const p=AA_PROP[a]||0; return p>0?0xffb454 : p<0?0x63b3ff : 0xff77aa; }
 
 let proteinNodes = [];
 const protGroup = new Group(); scene.add(protGroup);
@@ -266,84 +315,75 @@ let hasProtein = false;
 
 function translate(){
   const seq = sequence.join('');
-  let start = seq.indexOf('ATG');
-  if(start<0) start=0;
+  let start = seq.indexOf('ATG'); if(start<0) start=0;
   const aas=[];
   for(let i=start;i+3<=seq.length;i+=3){
-    const c = seq.substr(i,3);
-    const aa = CODON_TABLE[c];
-    if(aa==='*'||!aa) break;
-    aas.push(aa);
+    const aa = CODON_TABLE[seq.substr(i,3)];
+    if(aa==='*'||!aa) break; aas.push(aa);
   }
   buildProtein(aas);
   document.getElementById('protBox').textContent =
-    aas.length? aas.join('') + '  ('+aas.length+' 残基)' : '停止コドンまでにアミノ酸なし';
+    aas.length? aas.join('') + '  ('+aas.length+' 個の部品)' : '読み取れる部品がありませんでした';
+  if(aas.length) toast('部品ができた！内側にたたまれていくよ');
 }
-
 function buildProtein(aas){
-  // 既存除去
   for(let i=nodes.length-1;i>=0;i--) if(nodes[i].strand===2) nodes.splice(i,1);
   bonds = bonds.filter(b=>b.type!=='protein'&&b.type!=='hydrophobic');
-  while(protGroup.children.length) protGroup.remove(protGroup.children[0]);
-  proteinNodes=[];
-  hasProtein = aas.length>0;
+  clearGroup(protGroup); proteinNodes=[]; hasProtein=aas.length>0;
   if(!hasProtein) return;
-
-  const off = new Vector3(16, 0, 0); // DNAの横に配置
+  const ox = 16;
   aas.forEach((aa,i)=>{
-    const n = makeNode(off.x + (i - aas.length/2)*1.4,
-      off.y + (Math.random()-.5)*0.5, off.z + (Math.random()-.5)*0.5,
-      { strand:2, aa, idx:i, hyd: AA_PROP[aa]?AA_PROP[aa][1]:0 });
+    const n = makeNode(new Vector3(ox + (i-aas.length/2)*1.4, (Math.random()-.5)*.5, (Math.random()-.5)*.5),
+      { strand:2, aa, idx:i, hyd: AA_PROP[aa]||0 });
     n.mesh = baseMesh(aaColor(aa)); n.mesh.scale.setScalar(0.7);
-    n.mesh.userData.node = n; protGroup.add(n.mesh);
-    proteinNodes.push(n);
+    n.mesh.userData.node = n; protGroup.add(n.mesh); proteinNodes.push(n);
   });
-  // ペプチド結合（背骨）
   for(let i=0;i<proteinNodes.length-1;i++){
-    const b = { a:proteinNodes[i], b:proteinNodes[i+1], k:0.5, type:'protein', rest:1.4 };
-    bonds.push(b); b.mesh = makeBondMesh(0xcfd8e6, 0.09);
+    const b={ a:proteinNodes[i], b:proteinNodes[i+1], k:0.5, type:'protein', rest:1.4 };
+    b.mesh = makeBondMesh(0xcfd8e6, 0.09); bonds.push(b);
   }
-  // 疎水性コラプス: 疎水性残基どうしが弱く引き合う
-  for(let i=0;i<proteinNodes.length;i++){
-    for(let j=i+2;j<proteinNodes.length;j++){
-      if(proteinNodes[i].hyd>0 && proteinNodes[j].hyd>0){
-        bonds.push({ a:proteinNodes[i], b:proteinNodes[j], k:0.012,
-          type:'hydrophobic', rest:2.4 });
-      }
-    }
-  }
+  for(let i=0;i<proteinNodes.length;i++)for(let j=i+2;j<proteinNodes.length;j++)
+    if(proteinNodes[i].hyd>0 && proteinNodes[j].hyd>0)
+      bonds.push({ a:proteinNodes[i], b:proteinNodes[j], k:0.012, type:'hydrophobic', rest:2.4 });
   if(!params.showDNA){ dnaGroup.visible=false; bondGroup.visible=false; }
 }
 
-// ---------- 物理ステップ（Verlet） ----------
+// ---------- 物理ステップ ----------
 const tmp = new Vector3();
 function physics(){
   const stiff = params.stiff;
-  // バネ力
+  // 一般のバネ（背骨・ペプチド・疎水）
   for(const b of bonds){
     tmp.copy(b.b.pos).sub(b.a.pos);
     const d = tmp.length(); if(d<1e-5) continue;
-    let rest = b.rest;
-    let k = b.k * stiff;
-    // 塩基対=磁力的: 近いと強く、離れすぎると切れて弱まる
-    if(b.type==='pair'){
-      const stretch = d - rest;
-      const breakDist = rest*2.4;
-      if(d>breakDist){ k*=0.05; }        // 引き離すと"外れた"感覚
-      else k *= (1 + Math.max(0,-stretch)*0.3);
-    }
-    // メチル化領域の凝集
-    let f = (d - rest) * k;
+    const f = (d - b.rest) * b.k * stiff;
     tmp.multiplyScalar(f/d);
     if(!b.a.pinned) b.a.pos.add(tmp);
     if(!b.b.pinned) b.b.pos.sub(tmp);
   }
-  // クロマチン凝集: メチル化ノードがあればそれ同士、
-  // なければDNA鎖全体を弱く引き寄せて「畳まれる」のを見せる
+  // 相補ペアの「磁石」: 合う相手だけ引き合う / 合わないと反発
+  for(let i=0;i<helixNodes.length;i++){
+    const a=helixNodes[i], b=helixNodesB[i];
+    tmp.copy(b.pos).sub(a.pos); const d=tmp.length(); if(d<1e-5) continue;
+    const matched = COMPLEMENT[a.base]===b.base;
+    let f=0;
+    if(matched){
+      if(d < CAPTURE){                      // 捕まえられる距離: 元に戻ろうとする
+        f = (d - PAIR_REST) * 0.06 * stiff;
+        if(d < PAIR_REST*1.3) f *= 1.6;     // 近いほどキュッと吸着（磁石感）
+      } // 遠いと力ゼロ = 外れて開いたまま
+    } else {                                 // 不一致: 近いと押し返す
+      if(d < PAIR_REST*1.8) f = (d - PAIR_REST*1.8) * 0.05 * stiff;
+    }
+    tmp.multiplyScalar(f/d);
+    if(!a.pinned) a.pos.add(tmp);
+    if(!b.pinned) b.pos.sub(tmp);
+  }
+  // 遺伝子スイッチOFF: メチル化どうし（無ければ鎖全体）を引き寄せて畳む
   if(params.compact>0){
     const meths = nodes.filter(n=>n.meth);
     const targets = meths.length>1 ? meths : nodes.filter(n=>n.strand<2);
-    const cs = params.compact*0.0006 * (meths.length>1?1:0.35);
+    const cs = params.compact*0.0006*(meths.length>1?1:0.35);
     for(let i=0;i<targets.length;i++)for(let j=i+1;j<targets.length;j++){
       tmp.copy(targets[j].pos).sub(targets[i].pos);
       const d=tmp.length(); if(d<0.01)continue;
@@ -352,178 +392,227 @@ function physics(){
       if(!targets[j].pinned) targets[j].pos.sub(tmp);
     }
   }
-  // 熱ゆらぎ（ブラウン運動）: 常に微振動させることで
-  // 「硬さ」「粘性」スライダーの効果が静止時でも目に見える
-  const jitter = 0.06;
-  // Verlet積分（速度=pos-prev、減衰）＋熱ゆらぎ
+  // Verlet積分 + 熱ゆらぎ（常に微振動 → 硬さ/粘性が目に見える）
+  const jitter=0.05;
   for(const n of nodes){
     if(n.pinned) continue;
     tmp.copy(n.pos).sub(n.prev).multiplyScalar(params.damp);
-    n.prev.copy(n.pos);
-    n.pos.add(tmp);
-    n.pos.x += (Math.random()-.5)*jitter;
-    n.pos.y += (Math.random()-.5)*jitter;
-    n.pos.z += (Math.random()-.5)*jitter;
+    n.prev.copy(n.pos); n.pos.add(tmp);
+    n.pos.x+=(Math.random()-.5)*jitter; n.pos.y+=(Math.random()-.5)*jitter; n.pos.z+=(Math.random()-.5)*jitter;
   }
 }
 
-// ---------- レンダー更新 ----------
+// ---------- 描画同期 ----------
+let bi = 0; // 一般bond用index参照は不要（各bにmesh）
 function syncMeshes(){
   for(const n of nodes){
     if(n.mesh) n.mesh.position.copy(n.pos);
-    if(n.methMesh){ n.methMesh.visible = n.meth;
-      if(n.meth){ n.methMesh.position.copy(n.pos).y += 1.1; } }
+    if(n.methMesh){ n.methMesh.visible=n.meth; if(n.meth){ n.methMesh.position.copy(n.pos); n.methMesh.position.y+=1.0; } }
   }
-  for(const b of bonds){
-    if(!b.mesh) continue;
-    orientBond(b.mesh, b.a.pos, b.b.pos);
-    if(b.type==='pair'){
-      const d = b.a.pos.distanceTo(b.b.pos);
-      b.mesh.material.opacity = d>b.rest*2.4? 0.12 : 0.85; // 外れると薄く
+  for(const b of bonds) if(b.mesh) orientBond(b.mesh, b.a.pos, b.b.pos);
+  // ペア線＋不一致マーカー
+  for(let i=0;i<helixNodes.length;i++){
+    const a=helixNodes[i], b=helixNodesB[i];
+    const d=a.pos.distanceTo(b.pos);
+    const matched = COMPLEMENT[a.base]===b.base;
+    const pm=pairMeshes[i], mk=mismatchMarks[i];
+    if(matched){
+      pm.visible=true; orientBond(pm,a.pos,b.pos);
+      const closed = d < PAIR_REST*1.4;
+      pm.material.color.setHex(closed?0x7fe3c4:0x55708f);
+      pm.material.opacity = d>CAPTURE?0.12 : closed?0.9:0.5;
+      mk.visible=false;
+    } else {
+      pm.visible=false;
+      mk.visible=true; mk.position.copy(a.pos).add(b.pos).multiplyScalar(0.5);
     }
   }
 }
 
 // ---------- インタラクション ----------
-const raycaster = new Raycaster();
-const mouse = new Vector2();
-let dragNode = null;
-const dragPlane = new Plane();
-const dragPoint = new Vector3();
-
-let pickBaseMode = false;   // 塩基入れ替えモード
-let methPenMode = false;    // メチル化ペン
+const raycaster = new Raycaster(); const mouse = new Vector2();
+let dragNode=null; const dragPlane=new Plane(); const dragPoint=new Vector3();
+let pickBaseMode=false, methPenMode=false;
 
 function pointerNode(e){
-  const r = renderer.domElement.getBoundingClientRect();
-  mouse.x = ((e.clientX-r.left)/r.width)*2-1;
-  mouse.y = -((e.clientY-r.top)/r.height)*2+1;
-  raycaster.setFromCamera(mouse, camera);
+  const r=renderer.domElement.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  raycaster.setFromCamera(mouse,camera);
   const meshes = nodes.filter(n=>n.mesh&&n.mesh.parent&&n.mesh.parent.visible).map(n=>n.mesh);
-  const hit = raycaster.intersectObjects(meshes, false);
+  const hit=raycaster.intersectObjects(meshes,false);
   return hit.length? hit[0].object.userData.node : null;
 }
-
 renderer.domElement.addEventListener('pointerdown', e=>{
-  const n = pointerNode(e);
-  if(!n) return;
-
-  if(pickBaseMode && n.strand<2){ selectedForEdit = n; flash(n); return; }
+  if(replicating) return;
+  const n=pointerNode(e); if(!n) return;
+  if(pickBaseMode && n.strand<2){ selectedForEdit=n; flash(n); return; }
   if(methPenMode && n.strand<2){ toggleMeth(n); return; }
-
-  // ドラッグ開始
-  dragNode = n; controls.enabled = false;
-  dragPlane.setFromNormalAndCoplanarPoint(
-    camera.getWorldDirection(new Vector3()).negate(), n.pos);
+  dragNode=n; controls.enabled=false;
+  dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new Vector3()).negate(), n.pos);
 });
 renderer.domElement.addEventListener('pointermove', e=>{
   if(!dragNode) return;
-  const r = renderer.domElement.getBoundingClientRect();
-  mouse.x=((e.clientX-r.left)/r.width)*2-1;
-  mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  const r=renderer.domElement.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
   raycaster.setFromCamera(mouse,camera);
-  if(raycaster.ray.intersectPlane(dragPlane, dragPoint)){
-    dragNode.pos.copy(dragPoint); dragNode.prev.copy(dragPoint);
-    dragNode.pinned = true;
+  if(raycaster.ray.intersectPlane(dragPlane,dragPoint)){
+    dragNode.pos.copy(dragPoint); dragNode.prev.copy(dragPoint); dragNode.pinned=true;
   }
 });
-addEventListener('pointerup', ()=>{
-  if(dragNode){ dragNode.pinned=false; dragNode=null; }
-  controls.enabled=true;
-});
+addEventListener('pointerup', ()=>{ if(dragNode){ dragNode.pinned=false; dragNode=null; } controls.enabled=true; });
 
-// ダブルクリック=ランダム変異
-renderer.domElement.addEventListener('dblclick', e=>{
-  const n = pointerNode(e);
-  if(n && n.strand<2){
-    let nb; do{ nb=BASES[Math.floor(Math.random()*4)]; }while(nb===n.base && Math.random()<0.7);
-    setBase(n.idx, nb);
-  }
-});
-
-let selectedForEdit = null;
+let selectedForEdit=null;
 function flash(n){
-  const orig = n.mesh.material.emissive.getHex();
+  const o=n.mesh.material.emissive.getHex();
   n.mesh.material.emissive.setHex(0xffffff);
-  setTimeout(()=>n.mesh.material.emissive.setHex(orig), 200);
+  setTimeout(()=>n.mesh.material.emissive.setHex(o),200);
 }
-function setBase(idx, b){
-  sequence[idx]=b;
-  const a = helixNodes[idx], comp = helixNodesB[idx];
-  a.base=b; a.mesh.material.color.setHex(BASE_COLORS[b]);
-  comp.base=COMPLEMENT[b]; comp.mesh.material.color.setHex(BASE_COLORS[COMPLEMENT[b]]);
-  // C以外はメチル化解除
-  if(b!=='C'){ a.meth=false; }
+function setBase(node, base){
+  // 相手は勝手に直さない → 合わなければ赤くはじく（学び）
+  node.base=base; node.mesh.material.color.setHex(BASE_COLORS[base]);
+  if(base!=='C') node.meth=false;
   updateSeqBox();
+  const i=node.idx, other = node.strand===0?helixNodesB[i]:helixNodes[i];
+  if(COMPLEMENT[node.base]!==other.base) toast('変異！ ペアが合わなくなった');
+  else toast('変異！');
 }
-function toggleMeth(n){
-  // メチル化はC(シトシン)のみ
-  if(n.base!=='C'){ flash(n); return; }
-  n.meth=!n.meth;
-}
+function toggleMeth(n){ if(n.base!=='C'){ flash(n); toast('印はC(シトシン)だけに付くよ'); return; } n.meth=!n.meth; }
 
 // ---------- UI ----------
 const $ = s=>document.querySelector(s);
 function updateSeqBox(){
-  const box = $('#seqBox');
-  box.innerHTML = sequence.map((b,i)=>
-    `<span style="color:#${BASE_COLORS[b].toString(16).padStart(6,'0')}">${b}</span>`).join('');
+  $('#seqBox').innerHTML = sequence.map((b,i)=>{
+    const mism = COMPLEMENT[helixNodes[i].base]!==helixNodesB[i].base;
+    const col = '#'+BASE_COLORS[helixNodes[i].base].toString(16).padStart(6,'0');
+    const s = `<span style="color:${col}">${helixNodes[i].base}</span>`;
+    return mism? `<u>${s}</u>` : s;
+  }).join('');
 }
 document.querySelectorAll('[data-base]').forEach(btn=>{
   btn.onclick=()=>{
-    if(selectedForEdit){ setBase(selectedForEdit.idx, btn.dataset.base); flash(selectedForEdit); }
-    else alert('先に「塩基を選ぶ」をONにして、変えたい塩基をクリックしてね');
+    if(selectedForEdit) setBase(selectedForEdit, btn.dataset.base);
+    else toast('「書きかえペン」をONにして玉をクリックしてね');
   };
 });
-$('#pickMode').onclick=e=>{
-  pickBaseMode=!pickBaseMode; if(pickBaseMode) methPenMode=false, syncModeBtns();
-  e.target.textContent='塩基を選ぶ: '+(pickBaseMode?'ON':'OFF');
-  e.target.classList.toggle('on',pickBaseMode); updateModeLabel(); syncModeBtns();
-};
-$('#methToggle').onclick=e=>{
-  methPenMode=!methPenMode; if(methPenMode) pickBaseMode=false;
-  syncModeBtns(); updateModeLabel();
-};
+$('#pickMode').onclick=()=>{ pickBaseMode=!pickBaseMode; if(pickBaseMode) methPenMode=false; syncModeBtns(); };
+$('#methToggle').onclick=()=>{ methPenMode=!methPenMode; if(methPenMode) pickBaseMode=false; syncModeBtns(); };
 function syncModeBtns(){
-  $('#pickMode').textContent='塩基を選ぶ: '+(pickBaseMode?'ON':'OFF');
+  $('#pickMode').textContent='書きかえペン: '+(pickBaseMode?'ON':'OFF');
   $('#pickMode').classList.toggle('on',pickBaseMode);
   $('#methToggle').textContent='メチル化ペン: '+(methPenMode?'ON':'OFF');
   $('#methToggle').classList.toggle('on',methPenMode);
+  $('#modeLabel').textContent = pickBaseMode?'書きかえ': methPenMode?'メチル化':'視点';
 }
-function updateModeLabel(){
-  $('#modeLabel').textContent = pickBaseMode?'塩基編集': methPenMode?'メチル化':'視点';
-}
+$('#fixPair').onclick=()=>{
+  for(let i=0;i<helixNodes.length;i++){
+    helixNodesB[i].base=COMPLEMENT[helixNodes[i].base];
+    helixNodesB[i].mesh.material.color.setHex(BASE_COLORS[helixNodesB[i].base]);
+  }
+  updateSeqBox(); toast('ペアをぜんぶ正しく直した');
+};
 $('#compact').oninput=e=>params.compact=+e.target.value;
 $('#stiff').oninput=e=>params.stiff=+e.target.value/100;
 $('#damp').oninput=e=>params.damp=+e.target.value/100;
-$('#translate').onclick=()=>{ translate(); };
-$('#refold').onclick=()=>{ if(hasProtein){ proteinNodes.forEach(n=>{
-  n.pos.add(new Vector3((Math.random()-.5)*4,(Math.random()-.5)*4,(Math.random()-.5)*4));
-  n.prev.copy(n.pos); }); } };
-$('#showDNA').onclick=e=>{
-  params.showDNA=!params.showDNA;
-  dnaGroup.visible=params.showDNA; bondGroup.visible=params.showDNA;
-  e.target.classList.toggle('on',params.showDNA);
+$('#translate').onclick=translate;
+$('#refold').onclick=()=>{ if(hasProtein) proteinNodes.forEach(n=>{ n.pos.add(new Vector3((Math.random()-.5)*4,(Math.random()-.5)*4,(Math.random()-.5)*4)); n.prev.copy(n.pos); }); };
+$('#showDNA').onclick=e=>{ params.showDNA=!params.showDNA; dnaGroup.visible=params.showDNA; bondGroup.visible=params.showDNA; e.target.classList.toggle('on',params.showDNA); };
+$('#reset').onclick=()=>{ setSequence("ATGGCACGTTACGGATCCAAAGAGTGA"); hideCaption(); };
+
+// お題プリセット
+const PRESETS = {
+  normal: { seq:"ATGGCACGTTACGGATCCAAAGAGTGA",
+    cap:"<b>ふつうの遺伝子</b>。A・T・G・Cの4文字で、体の設計図が書かれている。玉を引っ張ると2本がジッパーのように開くよ。" },
+  mutant: { seq:"ATGGTGCACCTGACTCCTGTGGAGAAG",
+    cap:"<b>1文字だけ変わった遺伝子</b>。たった1文字の違いで、できる部品（タンパク質）の形が変わることがある。実際に鎌状赤血球症は、この“1文字の変異”で起きる。「読み取って部品を作る」を押して形をくらべてみよう。" }
 };
-$('#reset').onclick=()=>{
-  sequence="ATGGCACGTTACGGATCCAAAGAGTGA".split('');
-  buildDNA(); while(protGroup.children.length) protGroup.remove(protGroup.children[0]);
-  proteinNodes=[]; hasProtein=false;
-  bonds=bonds.filter(b=>b.type!=='protein'&&b.type!=='hydrophobic');
-  for(let i=nodes.length-1;i>=0;i--) if(nodes[i].strand===2) nodes.splice(i,1);
-  $('#protBox').textContent='まだ翻訳していません';
-  params.compact=0; $('#compact').value=0;
-};
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.onclick=()=>{ const p=PRESETS[btn.dataset.preset]; setSequence(p.seq); showCaption(p.cap); };
+});
+function setSequence(str){ sequence=str.split(''); buildDNA(); $('#protBox').textContent='まだ作っていません'; params.compact=0; $('#compact').value=0; }
+
+// ---------- 複製アニメ ----------
+let anim=null;
+$('#replicate').onclick=startReplication;
+function startReplication(){
+  if(replicating) return;
+  replicating=true; hideCaption();
+  const N=helixNodes.length;
+  // 新しい相方ノードを生成（左: 元strand0 + 新B / 右: 元strand1 + 新A）
+  const newNodes=[];
+  const plan=[]; // {node, to}
+  // 元strand0 → 左helixの side0
+  helixNodes.forEach((n,i)=> plan.push({ node:n, from:n.pos.clone(), to:helixCoord(i,0,-10,N) }));
+  // 新相方（左 side1）
+  helixNodes.forEach((n,i)=>{
+    const nb=makeNode(n.pos.clone(),{strand:9,base:COMPLEMENT[n.base]});
+    nb.mesh=baseMesh(BASE_COLORS[nb.base]); nb.mesh.scale.setScalar(0.85); dnaGroup.add(nb.mesh);
+    newNodes.push(nb); plan.push({ node:nb, from:randNear(n.pos), to:helixCoord(i,1,-10,N) });
+  });
+  // 元strand1 → 右helix side0
+  helixNodesB.forEach((n,i)=> plan.push({ node:n, from:n.pos.clone(), to:helixCoord(i,0,10,N) }));
+  // 新相方（右 side1）
+  helixNodesB.forEach((n,i)=>{
+    const na=makeNode(n.pos.clone(),{strand:9,base:COMPLEMENT[n.base]});
+    na.mesh=baseMesh(BASE_COLORS[na.base]); na.mesh.scale.setScalar(0.85); dnaGroup.add(na.mesh);
+    newNodes.push(na); plan.push({ node:na, from:randNear(n.pos), to:helixCoord(i,1,10,N) });
+  });
+  // 既存ペア線と背骨は隠す（複製中はシンプルに）
+  bondGroup.visible=false; pairMeshes.forEach(m=>m.visible=false); mismatchMarks.forEach(m=>m.visible=false);
+  plan.forEach(p=>{ p.node.pos.copy(p.from); p.node.pinned=true; });
+  anim={ t:0, dur:2.6, plan };
+  showCaption("<b>DNAの複製</b>: 2本がほどけて、それぞれが“お手本(鋳型)”になる。ルール(A↔T, G↔C)にしたがって新しい相方が組み上がり、<b>まったく同じDNAが2本</b>できる。これが細胞が増えるときに毎回起きていること。");
+}
+function randNear(p){ return p.clone().add(new Vector3((Math.random()-.5)*14,(Math.random()-.5)*14,(Math.random()-.5)*14)); }
+function easeInOut(t){ return t<.5? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+
+// ---------- トースト / キャプション ----------
+let toastTimer=null;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1600); }
+function showCaption(html){ const c=$('#caption'); c.innerHTML=html; c.style.display='block'; }
+function hideCaption(){ $('#caption').style.display='none'; }
+
+// ---------- 初回ガイド ----------
+const STEPS=[
+  { t:"これは「DNA」です", b:"あなたの体をつくる設計図。マウスでドラッグすると、ぐるぐる回せます（スマホは指でスワイプ、2本指で拡大）。まずは眺めてみて。" },
+  { t:"引っ張ると開く", b:"2本のヒモが、はしごのようにペアでつながっています。玉を1つ外側にグイッと引っ張ると、ジッパーみたいに開きます。手を離すと、自分でくっついて元に戻ります。" },
+  { t:"色は4つの文字", b:"玉の色は A・T・G・C の4文字。ルールはひとつ、Aは必ずTと、Gは必ずCとペアになります。「書きかえペン」で文字を変えると、合わない相手は赤くはじき合います。" },
+  { t:"やってみよう", b:"「お題」を選ぶと有名な遺伝子が入り、「コピー」でDNAが2本に増える様子、「部品を作る」で設計図から体の部品ができる様子が見られます。では、どうぞ！" }
+];
+let gi=0;
+function renderGuide(){
+  const s=STEPS[gi];
+  $('#gStep').textContent=`STEP ${gi+1} / ${STEPS.length}`;
+  $('#gTitle').textContent=s.t; $('#gBody').textContent=s.b;
+  $('#gDots').innerHTML=STEPS.map((_,i)=>`<span class="${i===gi?'on':''}"></span>`).join('');
+  $('#gNext').textContent = gi===STEPS.length-1? 'はじめる' : '次へ';
+}
+function openGuide(){ gi=0; renderGuide(); $('#guide').style.display='flex'; }
+function closeGuide(){ $('#guide').style.display='none'; }
+$('#gNext').onclick=()=>{ if(gi<STEPS.length-1){ gi++; renderGuide(); } else closeGuide(); };
+$('#gSkip').onclick=closeGuide;
+$('#guideBtn').onclick=openGuide;
 
 // ---------- ループ ----------
-buildDNA();
-let sub=2; // 1フレームあたり物理サブステップ
+buildDNA(); syncModeBtns();
+try{ if(!localStorage.getItem('dna_seen')){ openGuide(); localStorage.setItem('dna_seen','1'); } else closeGuide(); }
+catch(e){ closeGuide(); }
+
 function animate(){
   requestAnimationFrame(animate);
-  for(let s=0;s<sub;s++) physics();
-  syncMeshes();
+  if(replicating && anim){
+    anim.t += 1/60;
+    const k=easeInOut(Math.min(anim.t/anim.dur,1));
+    for(const p of anim.plan){ p.node.pos.lerpVectors(p.from,p.to,k); p.node.prev.copy(p.node.pos); }
+    // 玉のメッシュ位置だけ更新
+    for(const n of nodes) if(n.mesh) n.mesh.position.copy(n.pos);
+    if(anim.t>=anim.dur){ replicating=false; anim=null; toast('同じDNAが2本になった！'); }
+  } else {
+    for(let s=0;s<2;s++) physics();
+    syncMeshes();
+  }
   controls.update();
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 animate();
 
