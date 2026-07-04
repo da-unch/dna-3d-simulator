@@ -153,6 +153,7 @@
 
   <div class="group">
     <h2>設計図から部品を作る <small>タンパク質</small></h2>
+    <p class="sub" style="margin:0 0 8px">DNAの文字は<b>球</b>、できた部品（アミノ酸）は<b>立方体</b>。形が違う＝役割が違う。</p>
     <div class="row"><button id="translate" class="big">読み取って部品を作る</button></div>
     <div class="row">
       <button id="refold">もう一度たたむ</button>
@@ -214,7 +215,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // ============================================================
 const { Scene, PerspectiveCamera, WebGLRenderer, Color, Vector3,
   AmbientLight, DirectionalLight, SphereGeometry, MeshStandardMaterial,
-  Mesh, Group, CylinderGeometry, Raycaster, Vector2, Plane } = THREE;
+  Mesh, Group, CylinderGeometry, BoxGeometry, Raycaster, Vector2, Plane } = THREE;
 
 const container = document.getElementById('app');
 const scene = new Scene();
@@ -263,6 +264,11 @@ function makeNode(p, opts={}) {
 const sphereGeo = new SphereGeometry(1, 20, 16);
 function baseMesh(color){
   return new Mesh(sphereGeo, new MeshStandardMaterial({ color, roughness:.4, metalness:.15 }));
+}
+// アミノ酸（部品）は立方体で表す → 塩基(球)と役割が違うことが一目でわかる
+const boxGeo = new BoxGeometry(1.5, 1.5, 1.5);
+function aaMesh(color){
+  return new Mesh(boxGeo, new MeshStandardMaterial({ color, roughness:.5, metalness:.1 }));
 }
 
 const bondGroup = new Group(); scene.add(bondGroup);
@@ -368,7 +374,7 @@ function buildProtein(aas){
   aas.forEach((aa,i)=>{
     const n = makeNode(new Vector3(ox + (i-aas.length/2)*1.4, (Math.random()-.5)*.5, (Math.random()-.5)*.5),
       { strand:2, aa, idx:i, hyd: AA_PROP[aa]||0 });
-    n.mesh = baseMesh(aaColor(aa)); n.mesh.scale.setScalar(0.7);
+    n.mesh = aaMesh(aaColor(aa)); n.mesh.scale.setScalar(0.7);
     n.mesh.userData.node = n; protGroup.add(n.mesh); proteinNodes.push(n);
   });
   for(let i=0;i<proteinNodes.length-1;i++){
