@@ -35,6 +35,18 @@
   .seq { font-family: ui-monospace, monospace; font-size:13px; letter-spacing:1px; word-break:break-all;
     background:#0c1220; border:1px solid var(--line); border-radius:8px; padding:8px; line-height:1.8; }
   .seq u { text-decoration: underline wavy var(--warn); text-underline-offset:3px; }
+  /* コドン読み取りビュー */
+  #codonView { margin-top:8px; }
+  #codonView .cwrap { display:flex; flex-wrap:wrap; gap:5px; }
+  #codonView .chip { font-family: ui-monospace, monospace; font-size:11px; text-align:center;
+    background:#0c1220; border:1px solid var(--line); border-radius:6px; padding:4px 5px; line-height:1.3; }
+  #codonView .chip .aa { display:block; font-size:12px; font-weight:700; color:var(--txt); margin-top:2px; }
+  #codonView .chip.start { border-color:#4dd4ac; }
+  #codonView .chip.start .aa { color:#4dd4ac; }
+  #codonView .chip.stop { border-color:var(--warn); }
+  #codonView .chip.stop .aa { color:var(--warn); }
+  #codonView .note { font-size:11px; color:var(--dim); margin-top:8px; line-height:1.6; }
+  #codonView .note b { color:var(--accent); }
   .legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:var(--dim); }
   .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
   details summary { cursor:pointer; color:var(--dim); font-size:11px; margin:4px 0; }
@@ -160,6 +172,7 @@
       <button id="showDNA" class="on">DNAを表示</button>
     </div>
     <div class="seq" id="protBox" style="min-height:20px">まだ作っていません</div>
+    <div id="codonView"></div>
     <div class="legend" style="margin-top:6px">
       <span><i style="background:#ffb454"></i>油っぽい</span>
       <span><i style="background:#63b3ff"></i>水になじむ</span>
@@ -355,35 +368,73 @@ let hasProtein = false;
 function translate(){
   const seq = sequence.join('');
   let start = seq.indexOf('ATG'); if(start<0) start=0;
-  const aas=[];
+  const aas=[], codons=[];
+  let stopped=false;
   for(let i=start;i+3<=seq.length;i+=3){
-    const aa = CODON_TABLE[seq.substr(i,3)];
-    if(aa==='*'||!aa) break; aas.push(aa);
+    const c = seq.substr(i,3), aa = CODON_TABLE[c];
+    if(aa==='*'){ codons.push({c, aa:'STOP', stop:true}); stopped=true; break; }
+    if(!aa) break;
+    codons.push({c, aa, start:i===start});
+    aas.push(aa);
   }
   buildProtein(aas);
   document.getElementById('protBox').textContent =
     aas.length? aas.join('') + '  ('+aas.length+' 個の部品)' : '読み取れる部品がありませんでした';
+  renderCodons(codons, aas.length, stopped);
   if(aas.length) toast('部品ができた！内側にたたまれていくよ');
+}
+// アミノ酸の日本語名（一言）
+const AA_NAME = { M:'開始/メチオニン',A:'アラニン',R:'アルギニン',N:'アスパラギン',D:'アスパラギン酸',
+  C:'システイン',E:'グルタミン酸',Q:'グルタミン',G:'グリシン',H:'ヒスチジン',I:'イソロイシン',
+  L:'ロイシン',K:'リジン',F:'フェニルアラニン',P:'プロリン',S:'セリン',T:'スレオニン',
+  W:'トリプトファン',Y:'チロシン',V:'バリン' };
+function renderCodons(codons, nAA, stopped){
+  if(!codons.length){ $('#codonView').innerHTML=''; return; }
+  const chips = codons.map(k=>{
+    const cls = k.stop?'stop':k.start?'start':'';
+    const label = k.stop?'STOP':k.aa;
+    const title = k.stop?'ここで終わり（部品にならない）':(AA_NAME[k.aa]||'');
+    return `<div class="chip ${cls}" title="${title}">${k.c}<span class="aa">${label}</span></div>`;
+  }).join('');
+  const nCod = codons.length;
+  let note = `DNAを<b>3文字ずつ</b>に区切ると <b>${nCod}コドン</b>。`;
+  if(stopped) note += ` 最後の1つは<b style="color:var(--warn)">終止コドン(STOP)</b>で部品にならないので、部品は <b>${nAA}個</b>。`;
+  else note += ` 全部が部品になって <b>${nAA}個</b>。`;
+  $('#codonView').innerHTML = `<div class="cwrap">${chips}</div><div class="note">${note}</div>`;
+}
+// 配列から決まる乱数（同じ配列なら毎回同じ形に畳む＝再現性）
+function seededRng(seq){
+  let h=2166136261; for(const ch of seq){ h^=ch.charCodeAt(0); h=Math.imul(h,16777619); }
+  return ()=>{ h+=0x6D2B79F5; let t=h; t=Math.imul(t^t>>>15,t|1);
+    t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; };
 }
 function buildProtein(aas){
   for(let i=nodes.length-1;i>=0;i--) if(nodes[i].strand===2) nodes.splice(i,1);
   bonds = bonds.filter(b=>b.type!=='protein'&&b.type!=='hydrophobic');
   clearGroup(protGroup); proteinNodes=[]; hasProtein=aas.length>0;
   if(!hasProtein) return;
+  const rng = seededRng(aas.join(''));   // 配列でシード＝再現性
   const ox = 16;
   aas.forEach((aa,i)=>{
-    const n = makeNode(new Vector3(ox + (i-aas.length/2)*1.4, (Math.random()-.5)*.5, (Math.random()-.5)*.5),
+    // 最初は横一列（伸びた状態）から。ゆらぎも配列で決まる
+    const n = makeNode(new Vector3(ox + (i-aas.length/2)*1.4, (rng()-.5)*.4, (rng()-.5)*.4),
       { strand:2, aa, idx:i, hyd: AA_PROP[aa]||0 });
     n.mesh = aaMesh(aaColor(aa)); n.mesh.scale.setScalar(0.7);
     n.mesh.userData.node = n; protGroup.add(n.mesh); proteinNodes.push(n);
   });
-  for(let i=0;i<proteinNodes.length-1;i++){
-    const b={ a:proteinNodes[i], b:proteinNodes[i+1], k:0.5, type:'protein', rest:1.4 };
+  const P = proteinNodes;
+  // ペプチド結合（隣どうし・強い）
+  for(let i=0;i<P.length-1;i++){
+    const b={ a:P[i], b:P[i+1], k:0.5, type:'protein', rest:1.4 };
     b.mesh = makeBondMesh(0xcfd8e6, 0.09); bonds.push(b);
   }
-  for(let i=0;i<proteinNodes.length;i++)for(let j=i+2;j<proteinNodes.length;j++)
-    if(proteinNodes[i].hyd>0 && proteinNodes[j].hyd>0)
-      bonds.push({ a:proteinNodes[i], b:proteinNodes[j], k:0.012, type:'hydrophobic', rest:2.4 });
+  // αヘリックス（らせん）を作る距離拘束: i↔i+3, i↔i+4 を近づけると骨格が巻く
+  for(let i=0;i+3<P.length;i++) bonds.push({ a:P[i], b:P[i+3], k:0.18, type:'protein', rest:1.9 });
+  for(let i=0;i+4<P.length;i++) bonds.push({ a:P[i], b:P[i+4], k:0.14, type:'protein', rest:2.3 });
+  // 疎水コア: 油っぽい残基どうしが引き合い、内側に集まる
+  for(let i=0;i<P.length;i++)for(let j=i+2;j<P.length;j++)
+    if(P[i].hyd>0 && P[j].hyd>0)
+      bonds.push({ a:P[i], b:P[j], k:0.02, type:'hydrophobic', rest:2.2 });
   if(!params.showDNA){ dnaGroup.visible=false; bondGroup.visible=false; }
 }
 
