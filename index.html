@@ -338,25 +338,32 @@ function physics(){
     if(!b.a.pinned) b.a.pos.add(tmp);
     if(!b.b.pinned) b.b.pos.sub(tmp);
   }
-  // クロマチン凝集: メチル化ノード同士を引き寄せる
+  // クロマチン凝集: メチル化ノードがあればそれ同士、
+  // なければDNA鎖全体を弱く引き寄せて「畳まれる」のを見せる
   if(params.compact>0){
     const meths = nodes.filter(n=>n.meth);
-    const cs = params.compact*0.0006;
-    for(let i=0;i<meths.length;i++)for(let j=i+1;j<meths.length;j++){
-      tmp.copy(meths[j].pos).sub(meths[i].pos);
+    const targets = meths.length>1 ? meths : nodes.filter(n=>n.strand<2);
+    const cs = params.compact*0.0006 * (meths.length>1?1:0.35);
+    for(let i=0;i<targets.length;i++)for(let j=i+1;j<targets.length;j++){
+      tmp.copy(targets[j].pos).sub(targets[i].pos);
       const d=tmp.length(); if(d<0.01)continue;
       tmp.multiplyScalar(cs);
-      if(!meths[i].pinned) meths[i].pos.add(tmp);
-      if(!meths[j].pinned) meths[j].pos.sub(tmp);
+      if(!targets[i].pinned) targets[i].pos.add(tmp);
+      if(!targets[j].pinned) targets[j].pos.sub(tmp);
     }
   }
-  // 弱い中心復元（発散防止）
+  // 熱ゆらぎ（ブラウン運動）: 常に微振動させることで
+  // 「硬さ」「粘性」スライダーの効果が静止時でも目に見える
+  const jitter = 0.06;
+  // Verlet積分（速度=pos-prev、減衰）＋熱ゆらぎ
   for(const n of nodes){
     if(n.pinned) continue;
-    // Verlet積分（速度=pos-prev、減衰）
     tmp.copy(n.pos).sub(n.prev).multiplyScalar(params.damp);
     n.prev.copy(n.pos);
     n.pos.add(tmp);
+    n.pos.x += (Math.random()-.5)*jitter;
+    n.pos.y += (Math.random()-.5)*jitter;
+    n.pos.z += (Math.random()-.5)*jitter;
   }
 }
 
