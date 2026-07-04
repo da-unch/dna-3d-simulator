@@ -105,9 +105,17 @@
 <div id="mode">操作モード: <b id="modeLabel">視点</b></div>
 <div id="hint">粒子をドラッグ=引っ張る / 背景をドラッグ=回転 / ダブルクリックで塩基をランダム変異</div>
 
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-<script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // ============================================================
 //  DNA / タンパク質 3Dシミュレーター  （単一ファイル・ビルド不要）
 //  物理: バネ+Verlet。塩基対は「磁力的」な引力でつながり、
@@ -127,7 +135,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 container.appendChild(renderer.domElement);
 
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
 
 scene.add(new AmbientLight(0xffffff, 0.55));
