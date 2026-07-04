@@ -43,6 +43,7 @@
   #codonView .chip .aa { display:block; font-size:12px; font-weight:700; color:var(--txt); margin-top:2px; }
   #codonView .chip.start { border-color:#4dd4ac; }
   #codonView .chip.start .aa { color:#4dd4ac; }
+  #codonView .chip.active { outline:2px solid var(--accent); outline-offset:1px; }
   #codonView .chip.stop { border-color:var(--warn); }
   #codonView .chip.stop .aa { color:var(--warn); }
   #codonView .note { font-size:11px; color:var(--dim); margin-top:8px; line-height:1.6; }
@@ -165,10 +166,10 @@
 
   <div class="group">
     <h2>設計図から部品を作る <small>タンパク質</small></h2>
-    <p class="sub" style="margin:0 0 8px">DNAの文字は<b>球</b>、できた部品（アミノ酸）は<b>立方体</b>。形が違う＝役割が違う。</p>
+    <p class="sub" style="margin:0 0 8px">押すと、DNAを<b>3文字ずつ</b>読み進み、その都度アミノ酸（<b>立方体</b>）が生まれて鎖につながります。DNA→コドン→アミノ酸の対応が見えます。</p>
     <div class="row"><button id="translate" class="big">読み取って部品を作る</button></div>
     <div class="row">
-      <button id="refold">もう一度たたむ</button>
+      <button id="refold">もう一度読み取る</button>
       <button id="showDNA" class="on">DNAを表示</button>
     </div>
     <div class="seq" id="protBox" style="min-height:20px">まだ作っていません</div>
@@ -311,7 +312,9 @@ function buildDNA(){
   nodes = []; bonds = []; helixNodes=[]; helixNodesB=[]; pairMeshes=[]; mismatchMarks=[];
   clearGroup(dnaGroup); clearGroup(bondGroup); clearGroup(protGroup);
   proteinNodes=[]; hasProtein=false;
-  replicating=false;
+  replicating=false; translating=false; transAnim=null;
+  if(readHead) readHead.visible=false;
+  if(document.getElementById('codonView')) $('#codonView').innerHTML='';
   const N = sequence.length;
   for(let i=0;i<N;i++){
     const a = makeNode(helixCoord(i,0,0,N), { base:sequence[i], strand:0, idx:i });
@@ -365,33 +368,15 @@ let proteinNodes = [];
 const protGroup = new Group(); scene.add(protGroup);
 let hasProtein = false;
 
-function translate(){
-  const seq = sequence.join('');
-  let start = seq.indexOf('ATG'); if(start<0) start=0;
-  const aas=[], codons=[];
-  let stopped=false;
-  for(let i=start;i+3<=seq.length;i+=3){
-    const c = seq.substr(i,3), aa = CODON_TABLE[c];
-    if(aa==='*'){ codons.push({c, aa:'STOP', stop:true}); stopped=true; break; }
-    if(!aa) break;
-    codons.push({c, aa, start:i===start});
-    aas.push(aa);
-  }
-  buildProtein(aas);
-  document.getElementById('protBox').textContent =
-    aas.length? aas.join('') + '  ('+aas.length+' 個の部品)' : '読み取れる部品がありませんでした';
-  renderCodons(codons, aas.length, stopped);
-  if(aas.length) toast('部品ができた！内側にたたまれていくよ');
-}
 // アミノ酸の日本語名（一言）
 const AA_NAME = { M:'開始/メチオニン',A:'アラニン',R:'アルギニン',N:'アスパラギン',D:'アスパラギン酸',
   C:'システイン',E:'グルタミン酸',Q:'グルタミン',G:'グリシン',H:'ヒスチジン',I:'イソロイシン',
   L:'ロイシン',K:'リジン',F:'フェニルアラニン',P:'プロリン',S:'セリン',T:'スレオニン',
   W:'トリプトファン',Y:'チロシン',V:'バリン' };
-function renderCodons(codons, nAA, stopped){
+function renderCodons(codons, nAA, stopped, active){
   if(!codons.length){ $('#codonView').innerHTML=''; return; }
-  const chips = codons.map(k=>{
-    const cls = k.stop?'stop':k.start?'start':'';
+  const chips = codons.map((k,i)=>{
+    const cls = [k.stop?'stop':k.start?'start':'', i===active?'active':''].join(' ');
     const label = k.stop?'STOP':k.aa;
     const title = k.stop?'ここで終わり（部品にならない）':(AA_NAME[k.aa]||'');
     return `<div class="chip ${cls}" title="${title}">${k.c}<span class="aa">${label}</span></div>`;
@@ -402,40 +387,98 @@ function renderCodons(codons, nAA, stopped){
   else note += ` 全部が部品になって <b>${nAA}個</b>。`;
   $('#codonView').innerHTML = `<div class="cwrap">${chips}</div><div class="note">${note}</div>`;
 }
-// 配列から決まる乱数（同じ配列なら毎回同じ形に畳む＝再現性）
-function seededRng(seq){
-  let h=2166136261; for(const ch of seq){ h^=ch.charCodeAt(0); h=Math.imul(h,16777619); }
-  return ()=>{ h+=0x6D2B79F5; let t=h; t=Math.imul(t^t>>>15,t|1);
-    t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; };
+
+// 読み取りヘッド（DNA上を進む光る印）
+let readHead = new Mesh(new SphereGeometry(1.7,16,12),
+  new MeshStandardMaterial({ color:0xffe08a, emissive:0xffcc55, transparent:true, opacity:0.28 }));
+readHead.visible=false; scene.add(readHead);
+
+let translating=false, transAnim=null;
+
+function slotPos(i, nAA){ return new Vector3(9.5, (nAA-1)/2*1.5 - i*1.5, 4); }
+function setBaseHL(idx, on, hex){
+  const n = helixNodes[idx]; if(!n||!n.mesh) return;
+  n.mesh.scale.setScalar(on?1.2:0.85);
+  n.mesh.material.emissive.setHex(on?hex:0x000000);
 }
-function buildProtein(aas){
-  for(let i=nodes.length-1;i>=0;i--) if(nodes[i].strand===2) nodes.splice(i,1);
-  bonds = bonds.filter(b=>b.type!=='protein'&&b.type!=='hydrophobic');
-  clearGroup(protGroup); proteinNodes=[]; hasProtein=aas.length>0;
-  if(!hasProtein) return;
-  const rng = seededRng(aas.join(''));   // 配列でシード＝再現性
-  const ox = 16;
-  aas.forEach((aa,i)=>{
-    // 最初は横一列（伸びた状態）から。ゆらぎも配列で決まる
-    const n = makeNode(new Vector3(ox + (i-aas.length/2)*1.4, (rng()-.5)*.4, (rng()-.5)*.4),
-      { strand:2, aa, idx:i, hyd: AA_PROP[aa]||0 });
-    n.mesh = aaMesh(aaColor(aa)); n.mesh.scale.setScalar(0.7);
-    n.mesh.userData.node = n; protGroup.add(n.mesh); proteinNodes.push(n);
-  });
-  const P = proteinNodes;
-  // ペプチド結合（隣どうし・強い）
-  for(let i=0;i<P.length-1;i++){
-    const b={ a:P[i], b:P[i+1], k:0.5, type:'protein', rest:1.4 };
-    b.mesh = makeBondMesh(0xcfd8e6, 0.09); bonds.push(b);
+
+function translate(){
+  if(translating||replicating) return;
+  const seq = sequence.join('');
+  let start = seq.indexOf('ATG'); if(start<0) start=0;
+  const aas=[], codons=[]; let stopped=false;
+  for(let i=start;i+3<=seq.length;i+=3){
+    const c = seq.substr(i,3), aa = CODON_TABLE[c];
+    if(aa==='*'){ codons.push({c, aa:'STOP', stop:true, base:i}); stopped=true; break; }
+    if(!aa) break;
+    codons.push({c, aa, start:i===start, base:i}); aas.push(aa);
   }
-  // αヘリックス（らせん）を作る距離拘束: i↔i+3, i↔i+4 を近づけると骨格が巻く
-  for(let i=0;i+3<P.length;i++) bonds.push({ a:P[i], b:P[i+3], k:0.18, type:'protein', rest:1.9 });
-  for(let i=0;i+4<P.length;i++) bonds.push({ a:P[i], b:P[i+4], k:0.14, type:'protein', rest:2.3 });
-  // 疎水コア: 油っぽい残基どうしが引き合い、内側に集まる
-  for(let i=0;i<P.length;i++)for(let j=i+2;j<P.length;j++)
-    if(P[i].hyd>0 && P[j].hyd>0)
-      bonds.push({ a:P[i], b:P[j], k:0.02, type:'hydrophobic', rest:2.2 });
-  if(!params.showDNA){ dnaGroup.visible=false; bondGroup.visible=false; }
+  // 前回の部品を消す
+  for(let k=nodes.length-1;k>=0;k--) if(nodes[k].strand===2) nodes.splice(k,1);
+  bonds = bonds.filter(b=>b.type!=='protein'); clearGroup(protGroup); proteinNodes=[]; hasProtein=false;
+  renderCodons(codons, aas.length, stopped, -1);
+  if(!codons.length){ $('#protBox').textContent='読み取れる部品がありませんでした'; return; }
+  // DNAを見せる
+  params.showDNA=true; dnaGroup.visible=true; bondGroup.visible=true;
+  $('#showDNA').classList.add('on');
+  // アニメ開始
+  translating=true; readHead.visible=true;
+  transAnim={ codons, nAA:aas.length, k:0, t:0, aaIdx:0, cube:null };
+  $('#protBox').textContent=`読み取り中… 0 / ${aas.length}`;
+}
+
+const HL_END=0.45, EMIT_END=1.05;
+function stepTranslation(dt){
+  const A=transAnim; if(!A) return;
+  A.t += dt;
+  const cur=A.codons[A.k];
+  const bi=cur.base;
+  const mid = new Vector3();
+  let cnt=0;
+  for(let j=0;j<3;j++){ const n=helixNodes[bi+j]; if(n){ mid.add(n.pos); cnt++; } }
+  if(cnt) mid.multiplyScalar(1/cnt);
+  readHead.position.copy(mid);
+  // 現在のコドンの3塩基を光らせる
+  for(let j=0;j<3;j++) setBaseHL(bi+j, true, cur.stop?0xff3355:0xffee88);
+  renderCodons(A.codons, A.nAA, A.codons.some(c=>c.stop), A.k);
+
+  if(!cur.stop){
+    // 立方体を生成してDNAから鎖の位置へ飛ばす
+    if(A.t>=HL_END && !A.cube){
+      const n = makeNode(mid.clone(), { strand:2, aa:cur.aa, pinned:true });
+      n.mesh = aaMesh(aaColor(cur.aa)); n.mesh.scale.setScalar(0.7);
+      n.mesh.userData.node=n; protGroup.add(n.mesh); n.emissiveFlash=true;
+      A.cube = { node:n, from:mid.clone(), to:slotPos(A.aaIdx, A.nAA) };
+    }
+    if(A.cube){
+      const t2 = Math.min((A.t-HL_END)/(EMIT_END-HL_END),1);
+      const e = t2<.5?2*t2*t2:1-Math.pow(-2*t2+2,2)/2;
+      A.cube.node.pos.lerpVectors(A.cube.from, A.cube.to, e);
+      A.cube.node.prev.copy(A.cube.node.pos);
+    }
+  }
+  const done = cur.stop ? A.t>=0.8 : A.t>=EMIT_END;
+  if(done){
+    for(let j=0;j<3;j++) setBaseHL(bi+j, false);
+    if(cur.stop){ finishTranslation(); return; }
+    // 立方体を鎖に確定＋ペプチド結合
+    const n=A.cube.node; proteinNodes.push(n);
+    if(A.aaIdx>0){
+      const b={ a:proteinNodes[A.aaIdx-1], b:n, k:0, type:'protein', rest:1.5 };
+      b.mesh = makeBondMesh(0xcfd8e6, 0.09); bonds.push(b);
+    }
+    A.aaIdx++; A.cube=null; A.k++; A.t=0;
+    $('#protBox').textContent=`読み取り中… ${A.aaIdx} / ${A.nAA}`;
+    if(A.k>=A.codons.length) finishTranslation();
+  }
+}
+function finishTranslation(){
+  const A=transAnim; translating=false; readHead.visible=false;
+  hasProtein = proteinNodes.length>0;
+  if(A){ renderCodons(A.codons, A.nAA, A.codons.some(c=>c.stop), -1);
+    $('#protBox').textContent = A.nAA? proteinNodes.map(n=>n.aa).join('')+`  (${A.nAA} 個の部品)` : '部品なし';
+    toast(`${A.nAA}個の部品ができた`); }
+  transAnim=null;
 }
 
 // ---------- 物理ステップ ----------
@@ -533,7 +576,7 @@ function pointerNode(e){
   return hit.length? hit[0].object.userData.node : null;
 }
 renderer.domElement.addEventListener('pointerdown', e=>{
-  if(replicating) return;
+  if(replicating||translating) return;
   const n=pointerNode(e); if(!n) return;
   if(pickBaseMode && n.strand<2){ selectedForEdit=n; flash(n); return; }
   if(methPenMode && n.strand<2){ toggleMeth(n); return; }
@@ -604,7 +647,7 @@ $('#compact').oninput=e=>params.compact=+e.target.value;
 $('#stiff').oninput=e=>params.stiff=+e.target.value/100;
 $('#damp').oninput=e=>params.damp=+e.target.value/100;
 $('#translate').onclick=translate;
-$('#refold').onclick=()=>{ if(hasProtein) proteinNodes.forEach(n=>{ n.pos.add(new Vector3((Math.random()-.5)*4,(Math.random()-.5)*4,(Math.random()-.5)*4)); n.prev.copy(n.pos); }); };
+$('#refold').onclick=()=>translate();
 $('#showDNA').onclick=e=>{ params.showDNA=!params.showDNA; dnaGroup.visible=params.showDNA; bondGroup.visible=params.showDNA; e.target.classList.toggle('on',params.showDNA); };
 $('#reset').onclick=()=>{ setSequence("ATGGCACGTTACGGATCCAAAGAGTGA"); hideCaption(); };
 
@@ -713,6 +756,7 @@ function animate(){
     if(anim.t>=anim.dur){ replicating=false; anim=null; toast('同じDNAが2本になった！'); }
   } else {
     for(let s=0;s<2;s++) physics();
+    if(translating) stepTranslation(1/60);
     syncMeshes();
   }
   controls.update();
