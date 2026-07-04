@@ -64,17 +64,51 @@
   #guideCard .step { font-size:12px; color:var(--accent); letter-spacing:.1em; margin:0 0 8px; }
   #guideCard h2 { margin:0 0 10px; font-size:19px; line-height:1.4; }
   #guideCard p { color:#c7d3e6; line-height:1.7; margin:0 0 20px; font-size:14px; }
-  #guideCard .nav { display:flex; gap:10px; align-items:center; }
+  #guideCard .nav { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   #guideCard .dots { flex:1; display:flex; gap:6px; }
   #guideCard .dots span { width:7px; height:7px; border-radius:50%; background:var(--line); }
   #guideCard .dots span.on { background:var(--accent); }
   #guideCard button { flex:none; min-width:auto; padding:9px 18px; }
   #guideCard button.skip { background:transparent; border:none; color:var(--dim); }
   #guideCard button.next { background:var(--accent); color:#04121d; font-weight:700; border-color:var(--accent); }
+
+  /* メニュー開閉ボタン（モバイル用・PCでは非表示） */
+  #menuBtn { display:none; position:fixed; z-index:22; top:10px; left:10px;
+    width:46px; height:46px; border-radius:12px; font-size:20px; line-height:1;
+    background:rgba(20,27,43,.94); border:1px solid var(--line); color:var(--txt);
+    align-items:center; justify-content:center; padding:0; }
+  #panelBackdrop { display:none; }
+
+  @media (max-width: 680px) {
+    #menuBtn { display:flex; }
+    #mode { top:10px; right:10px; padding:6px 9px; font-size:11px; }
+    #hint { display:none; }
+    /* パネルを下から出るシートに */
+    #panel {
+      top:auto; bottom:0; left:0; right:0; width:100%; max-width:none;
+      max-height:80vh; border-radius:16px 16px 0 0; border-bottom:none;
+      transform:translateY(101%); transition:transform .28s ease;
+      padding-top:34px; box-shadow:0 -14px 40px rgba(0,0,0,.5);
+    }
+    #panel.open { transform:translateY(0); }
+    /* シート上部のつまみ */
+    #panel::before { content:""; position:absolute; top:10px; left:50%;
+      transform:translateX(-50%); width:44px; height:5px; border-radius:3px; background:var(--line); }
+    #panelBackdrop.show { display:block; position:fixed; inset:0; z-index:9;
+      background:rgba(4,7,12,.45); }
+    #caption { width:calc(100% - 24px); bottom:14px; }
+    #guideCard { position:fixed; left:16px; right:16px; top:50%;
+      transform:translateY(-50%); width:auto; max-width:none; padding:22px 20px; }
+    #guideCard h2 { font-size:18px; }
+    #guideCard p { font-size:14px; }
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
+
+<button id="menuBtn" aria-label="メニュー">☰</button>
+<div id="panelBackdrop"></div>
 
 <div id="panel">
   <h1>DNAであそぶ</h1>
@@ -591,7 +625,21 @@ function openGuide(){ gi=0; renderGuide(); $('#guide').style.display='flex'; }
 function closeGuide(){ $('#guide').style.display='none'; }
 $('#gNext').onclick=()=>{ if(gi<STEPS.length-1){ gi++; renderGuide(); } else closeGuide(); };
 $('#gSkip').onclick=closeGuide;
-$('#guideBtn').onclick=openGuide;
+$('#guideBtn').onclick=()=>{ setPanel(false); openGuide(); };
+
+// ---------- モバイル: パネル開閉 ----------
+function setPanel(open){
+  $('#panel').classList.toggle('open',open);
+  $('#panelBackdrop').classList.toggle('show',open);
+  $('#menuBtn').textContent = open?'✕':'☰';
+}
+$('#menuBtn').onclick=()=>setPanel(!$('#panel').classList.contains('open'));
+$('#panelBackdrop').onclick=()=>setPanel(false);
+// お題・コピーを押したらシートを閉じてDNAを見せる（モバイル）
+const closeOnMobile=()=>{ if(matchMedia('(max-width:680px)').matches) setPanel(false); };
+document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',closeOnMobile));
+$('#replicate').addEventListener('click',closeOnMobile);
+$('#translate').addEventListener('click',closeOnMobile);
 
 // ---------- ループ ----------
 buildDNA(); syncModeBtns();
